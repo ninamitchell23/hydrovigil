@@ -3,12 +3,12 @@
 #include <util/delay.h>
 
 #define TEMP_SENSOR_SLAVE_ADDRESS 0x01
-#define LM35_PIN 0 // Pin A0 for the LM35 sensor (assuming it's connected to analog pin A0)
+#define LM35_PIN 0 // Pin A0 for the LM35 sensor
 
 // Global variable to store temperature data
 volatile uint16_t temperatureC = 0;
 
-// Timer configuration to trigger every 1 second (assuming 16 MHz clock)
+// Timer configuration to trigger every 1 second (16 MHz clock)
 #define TIMER_PRESCALER 64
 #define TIMER_COUNT (250) // To generate interrupt every 1 second
 
@@ -20,7 +20,7 @@ void setupI2C() {
 
 void setupADC() {
   // Set the ADC to read from pin A0 (LM35)
-  ADMUX = (1 << MUX0); // Select ADC1 (pin A0)
+  ADMUX = (1 << REFS0) | (LM35_PIN & 0x0F);  // Use AVCC as reference and ADC0 as input
   ADCSRA |= (1 << ADPS2) | (1 << ADPS1); // Prescaler to divide clock by 64
   ADCSRA |= (1 << ADEN); // Enable the ADC
 }
@@ -29,7 +29,10 @@ uint16_t readTemperature() {
   // Start ADC conversion
   ADCSRA |= (1 << ADSC); // Start the conversion
   while (ADCSRA & (1 << ADSC)); // Wait for conversion to complete
-  return ADC;
+
+  // Return the 10-bit ADC result (temperature in ADC units)
+  uint16_t result = ADC;
+  return result;
 }
 
 void setupTimer() {
