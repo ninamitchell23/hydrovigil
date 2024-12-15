@@ -143,8 +143,8 @@ void loop() {
     SFR_WRITE(0x3F + EEPROM_TURBIDITY_ADDR, (turbidity >> 8) & 0xFF);
     SFR_WRITE(0x3F + EEPROM_TURBIDITY_ADDR + 1, turbidity & 0xFF);
 
-    // Update LCD display
-    // Assuming LCD update functionality here
+    
+    
     if (turbidity > TURBIDITY_THRESHOLD) {
       notifyBuzzer(true); // Notify buzzer board
     } else {
