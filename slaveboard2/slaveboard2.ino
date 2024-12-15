@@ -3,72 +3,73 @@
 #include <util/delay.h>
 
 #define TURBIDITY_SENSOR_PIN 0 // ADC0 (Pin A0) is used for turbidity sensor
-#define TURBIDITY_THRESHOLD 500 // Example threshold for dirty water
+#define TURBIDITY_THRESHOLD 500 //  threshold for dirty water
 
 void setupADC() {
-  // Set reference voltage to AVcc with an external capacitor at the AREF pin
-  ADMUX = (1 << REFS0);  // AVcc as the reference voltage
-  
+  // Configure ADC reference voltage to AVcc
+  *(&ADMUX) = (1 << REFS0); // Set REFS0 bit for AVcc reference
+
   // Set ADC prescaler to 64 (for 16 MHz clock, ADC clock will be 250 kHz)
-  ADCSRA |= (1 << ADPS2) | (1 << ADPS1); // Prescaler 64
-  
-  // Enable ADC
-  ADCSRA |= (1 << ADEN);
+  *(&ADCSRA) |= (1 << ADPS2) | (1 << ADPS1); // Set ADPS2 and ADPS1 bits
+
+  // Enable the ADC
+  *(&ADCSRA) |= (1 << ADEN); // Set ADEN bit to enable ADC
 }
 
 uint16_t readADC(uint8_t channel) {
   // Select the ADC channel
-  ADMUX = (ADMUX & 0xF0) | (channel & 0x0F);  // Mask to select ADC channel
+  *(&ADMUX) = (*(&ADMUX) & 0xF0) | (channel & 0x0F); // Clear and set channel bits
 
-  // Start the conversion
-  ADCSRA |= (1 << ADSC); // Start the conversion
+  // Start the ADC conversion
+  *(&ADCSRA) |= (1 << ADSC); // Set ADSC bit to start conversion
 
-  // Wait for the conversion to finish
-  while (ADCSRA & (1 << ADSC)) {
-    // Wait here until ADSC becomes 0
-  }
+  // Wait for conversion to complete
+  while (*(&ADCSRA) & (1 << ADSC)); // Wait until ADSC bit is cleared
 
-  // Read the ADC result (10-bit value: 0-1023)
-  uint16_t result = ADC;  // ADC result (high byte + low byte)
-  return result;
+  // Return the 10-bit ADC result
+  return *((volatile uint16_t *)&ADC); // Read ADC data register
 }
 
 void setupI2C() {
-  // Set up the I2C hardware in slave mode
-  TWAR = (0x02 << 1); // Set the slave address (0x02 for turbidity sensor)
-  TWCR = (1 << TWEN) | (1 << TWINT); // Enable TWI (I2C) and clear interrupt flag
+  // Set the slave address for I2C
+  *(&TWAR) = (0x02 << 1); // Shift address left and set in TWAR
+
+  // Enable TWI (I2C)
+  *(&TWCR) = (1 << TWEN) | (1 << TWINT); // Set TWEN and clear TWINT to initialize
 }
 
 void setup() {
   // Initialize components
   setupADC();
   setupI2C();
-  
-  sei(); // Enable global interrupts
+
+  // Enable global interrupts
+  sei();
 }
 
 void loop() {
-  // Wait for I2C requests
-  TWCR = (1 << TWINT) | (1 << TWEN); // Enable I2C and clear interrupt flag
+  // Enable I2C and clear interrupt flag
+  *(&TWCR) = (1 << TWINT) | (1 << TWEN);
 
-  // Handle I2C communication (respond to master request)
-  if ((TWSR & 0xF8) == TW_SR_DATA_ACK) { // Wait for data from the master
-    uint8_t command = TWDR;  // Read the byte sent by the master
+  // Check if data has been received from the master
+  if ((*(&TWSR) & 0xF8) == 0x60) { // Check if own SLA+W has been received
+    *(&TWCR) = (1 << TWINT) | (1 << TWEN); // Clear interrupt flag
+    while (!(*(&TWCR) & (1 << TWINT))); // Wait for TWINT to be set
 
-    // If command is '0' (request turbidity sensor reading), send data back
-    if (command == 0) {
-      // Read the turbidity sensor value from ADC
-      uint16_t turbidityValue = readADC(TURBIDITY_SENSOR_PIN);
+    uint8_t command = *(&TWDR); // Read received command
 
-      // Send high byte of turbidity value to master
-      TWDR = (turbidityValue >> 8);
-      TWCR = (1 << TWINT) | (1 << TWEN); // Acknowledge and send high byte
-      while (!(TWCR & (1 << TWINT))); // Wait for ACK from master
+    if (command == 0) { // Master requests turbidity value
+      uint16_t turbidityValue = readADC(TURBIDITY_SENSOR_PIN); // Read ADC value
 
-      // Send low byte of turbidity value to master
-      TWDR = (turbidityValue & 0xFF);
-      TWCR = (1 << TWINT) | (1 << TWEN); // Acknowledge and send low byte
-      while (!(TWCR & (1 << TWINT))); // Wait for ACK from master
+      // Send high byte of turbidity value
+      *(&TWDR) = (turbidityValue >> 8); // Load high byte into TWDR
+      *(&TWCR) = (1 << TWINT) | (1 << TWEN); // Clear interrupt flag and transmit
+      while (!(*(&TWCR) & (1 << TWINT))); // Wait for transmission to complete
+
+      // Send low byte of turbidity value
+      *(&TWDR) = (turbidityValue & 0xFF); // Load low byte into TWDR
+      *(&TWCR) = (1 << TWINT) | (1 << TWEN); // Clear interrupt flag and transmit
+      while (!(*(&TWCR) & (1 << TWINT))); // Wait for transmission to complete
     }
   }
 }
