@@ -22,7 +22,6 @@ volatile uint16_t turbidity = 0;
 unsigned long lastDisplayUpdate = 0;
 const unsigned long displayInterval = 1000; // 1-second interval for LCD update
 
-// Helper macros to manipulate registers using pointers
 #define REG(addr) (*((volatile uint8_t *)(addr)))
 #define SFR_BIT_SET(sfr, bit) (REG(sfr) |= (1 << (bit)))
 #define SFR_BIT_CLEAR(sfr, bit) (REG(sfr) &= ~(1 << (bit)))
